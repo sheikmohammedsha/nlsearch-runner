@@ -1,0 +1,59 @@
+name: pages
+
+# Every push and pull request is built, so a broken page never reaches main.
+# main is also published to GitHub Pages at
+# https://sheikmohammedsha.github.io/nlsearch-runner/.
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # the site lives under /nlsearch-runner, not at the root of the domain
+      - run: npm run build
+        env:
+          PAGES_BASE_PATH: /nlsearch-runner
+
+      - run: npm run check
+
+      # _next would otherwise be dropped by Jekyll for starting with an underscore
+      - run: touch out/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: out
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
