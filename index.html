@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nlsearch chat</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --line: #e2e6ea;
+    --ink: #1b1f23;
+    --soft: #636b74;
+    --me: #1e6bb8;
+    --warn: #b23b3b;
+    --code: #f2f4f6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15181c; --panel: #1d2127; --line: #2d333b; --ink: #e6e9ec;
+      --soft: #9aa4af; --me: #5aa9f0; --warn: #ef8a8a; --code: #24292f;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15181c; --panel: #1d2127; --line: #2d333b; --ink: #e6e9ec;
+    --soft: #9aa4af; --me: #5aa9f0; --warn: #ef8a8a; --code: #24292f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex; flex-direction: column; height: 100vh;
+  }
+  header {
+    background: var(--panel); border-bottom: 1px solid var(--line);
+    padding: 0.7rem 1rem; display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;
+  }
+  header h1 { font-size: 1rem; margin: 0; font-weight: 600; }
+  header .where { color: var(--soft); font-size: 0.82rem; }
+  header .spacer { flex: 1; }
+  button, select {
+    font: inherit; font-size: 0.85rem; color: var(--ink); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 0.35rem; padding: 0.3rem 0.6rem; cursor: pointer;
+  }
+  button:hover { border-color: var(--me); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  label.toggle { font-size: 0.85rem; color: var(--soft); display: flex; align-items: center; gap: 0.3rem; cursor: pointer; }
+
+  #thread { flex: 1; overflow-y: auto; padding: 1rem; }
+  .wrap { max-width: 50rem; margin: 0 auto; }
+  .turn { margin-bottom: 1rem; display: flex; }
+  .turn.me { justify-content: flex-end; }
+  .bubble {
+    max-width: 85%; padding: 0.6rem 0.85rem; border-radius: 0.6rem;
+    background: var(--panel); border: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .turn.me .bubble { background: var(--me); border-color: var(--me); color: #fff; }
+  .bubble.bad { border-color: var(--warn); color: var(--warn); }
+  .meta { font-size: 0.75rem; color: var(--soft); margin-top: 0.4rem; }
+  details { margin-top: 0.45rem; }
+  details summary { font-size: 0.78rem; color: var(--soft); cursor: pointer; }
+  pre {
+    background: var(--code); border: 1px solid var(--line); border-radius: 0.35rem;
+    padding: 0.5rem 0.6rem; overflow-x: auto; font-size: 0.78rem; margin: 0.4rem 0 0;
+  }
+  .hint { color: var(--soft); text-align: center; margin-top: 15vh; }
+  .hint code { background: var(--code); padding: 0.1rem 0.3rem; border-radius: 0.25rem; }
+  .hint ul { list-style: none; padding: 0; margin: 0.8rem 0 0; }
+  .hint li { margin: 0.3rem 0; }
+  .hint button { font-size: 0.85rem; }
+
+  footer { background: var(--panel); border-top: 1px solid var(--line); padding: 0.7rem 1rem; }
+  .composer { max-width: 50rem; margin: 0 auto; display: flex; gap: 0.5rem; align-items: flex-end; }
+  textarea {
+    flex: 1; font: inherit; color: var(--ink); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 0.4rem; padding: 0.5rem 0.6rem;
+    resize: none; min-height: 2.6rem; max-height: 9rem;
+  }
+  textarea:focus { outline: none; border-color: var(--me); }
+  .controls { max-width: 50rem; margin: 0.5rem auto 0; display: flex; gap: 0.9rem; flex-wrap: wrap; align-items: center; }
+  .dot { display: inline-block; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--soft); }
+  .dot.on { background: #3fa45b; }
+  .dot.off { background: var(--warn); }
+  @media screen and (max-width: 42em) {
+    #thread { padding: 0.75rem 1rem; }
+    .bubble { max-width: 95%; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>nlsearch</h1>
+  <span class="where"><span class="dot" id="health"></span> <span id="node">connecting…</span></span>
+  <span class="spacer"></span>
+  <button id="analyze" title="Work out what the indices mean, now rather than on the first question">Analyze indices</button>
+  <button id="fresh" title="Start a new conversation with a new session id">New chat</button>
+</header>
+
+<div id="thread">
+  <div class="wrap">
+    <div class="hint" id="hint">
+      <p>Ask about your data in plain English.</p>
+      <ul>
+        <li><button class="try">what indices do I have</button></li>
+        <li><button class="try">how many products are there per category</button></li>
+        <li><button class="try">red shoes under 50</button></li>
+        <li><button class="try">now only the ones in stock</button></li>
+      </ul>
+      <p style="margin-top:1.2rem">Follow-ups work: the session is kept for you.<br>
+      Tick <code>dry run</code> before trying anything that writes.</p>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div class="composer">
+    <textarea id="box" rows="1" placeholder="Ask something, then press Enter…" autofocus></textarea>
+    <button id="send">Send</button>
+  </div>
+  <div class="controls">
+    <label class="toggle"><input type="checkbox" id="dry"> dry run <span style="opacity:.7">(plan only, nothing happens)</span></label>
+    <label class="toggle">answer
+      <select id="mode">
+        <option value="both">sentence and data</option>
+        <option value="explain">sentence only</option>
+        <option value="raw">data only</option>
+      </select>
+    </label>
+    <span class="toggle" style="opacity:.8">session <code id="session"></code></span>
+  </div>
+</footer>
+
+<script>
+const thread  = document.getElementById("thread").firstElementChild;
+const hint    = document.getElementById("hint");
+const box     = document.getElementById("box");
+const send    = document.getElementById("send");
+const dry     = document.getElementById("dry");
+const mode    = document.getElementById("mode");
+const health  = document.getElementById("health");
+const nodeTag = document.getElementById("node");
+
+let session = newSession();
+document.getElementById("session").textContent = session;
+
+function newSession() {
+  return "chat-" + Math.random().toString(36).slice(2, 8);
+}
+
+fetch("/where").then(r => r.json()).then(d => { nodeTag.textContent = d.elasticsearch; })
+  .catch(() => { nodeTag.textContent = "server not reachable"; });
+
+function add(who, text, cssClass) {
+  hint.style.display = "none";
+  const turn = document.createElement("div");
+  turn.className = "turn " + who;
+  const bubble = document.createElement("div");
+  bubble.className = "bubble" + (cssClass ? " " + cssClass : "");
+  bubble.textContent = text;
+  turn.appendChild(bubble);
+  thread.appendChild(turn);
+  thread.parentElement.scrollTop = thread.parentElement.scrollHeight;
+  return bubble;
+}
+
+function detail(bubble, label, value) {
+  const d = document.createElement("details");
+  const s = document.createElement("summary");
+  s.textContent = label;
+  const pre = document.createElement("pre");
+  pre.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  d.appendChild(s); d.appendChild(pre);
+  bubble.appendChild(d);
+}
+
+function note(bubble, text) {
+  const m = document.createElement("div");
+  m.className = "meta";
+  m.textContent = text;
+  bubble.appendChild(m);
+}
+
+async function ask(prompt) {
+  add("me", prompt);
+  box.value = "";
+  box.style.height = "auto";
+  send.disabled = true;
+  const waiting = add("them", "thinking…");
+  const started = Date.now();
+
+  const body = { prompt, session, response: mode.value };
+  if (dry.checked) body.dry_run = true;
+
+  try {
+    const answer = await fetch("/_nl", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const data = await answer.json();
+    const seconds = ((Date.now() - started) / 1000).toFixed(1);
+    waiting.textContent = "";
+
+    if (!answer.ok) {
+      waiting.classList.add("bad");
+      waiting.textContent = reasonFrom(data);
+      detail(waiting, "the whole error", data);
+      note(waiting, `${answer.status} · ${seconds}s`);
+      health.className = "dot off";
+      return;
+    }
+
+    health.className = "dot on";
+    waiting.textContent = data.response || data.text || "(no sentence came back; see the data below)";
+
+    if (data.action) {
+      const plan = { action: data.action };
+      if (data.index) plan.index = data.index;
+      if (data.id) plan.id = data.id;
+      if (data.body) plan.body = data.body;
+      if (data.docs) plan.docs = data.docs;
+      detail(waiting, "what it ran", plan);
+    }
+    if (data.result) detail(waiting, "what Elasticsearch answered", data.result);
+
+    const bits = [];
+    if (data.action) bits.push(data.action);
+    if (data.index) bits.push(data.index);
+    const total = data.result && data.result.hits && data.result.hits.total;
+    if (total && typeof total.value === "number") bits.push(total.value + " hits");
+    if (dry.checked) bits.push("dry run, nothing happened");
+    bits.push(seconds + "s");
+    if (data.model) bits.push(data.model);
+    note(waiting, bits.join(" · "));
+
+  } catch (broken) {
+    waiting.classList.add("bad");
+    waiting.textContent = "The page could not reach the local server: " + broken;
+    health.className = "dot off";
+  } finally {
+    send.disabled = false;
+    box.focus();
+  }
+}
+
+function reasonFrom(data) {
+  if (!data) return "Something went wrong.";
+  if (typeof data.error === "string") return data.error;
+  if (data.error && data.error.reason) return data.error.reason;
+  if (data.error && data.error.root_cause && data.error.root_cause[0]) return data.error.root_cause[0].reason;
+  return JSON.stringify(data).slice(0, 300);
+}
+
+send.onclick = () => { const q = box.value.trim(); if (q) ask(q); };
+box.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send.click(); }
+});
+box.addEventListener("input", () => {
+  box.style.height = "auto";
+  box.style.height = Math.min(box.scrollHeight, 144) + "px";
+});
+
+document.querySelectorAll(".try").forEach(b => {
+  b.onclick = () => ask(b.textContent);
+});
+
+document.getElementById("fresh").onclick = () => {
+  session = newSession();
+  document.getElementById("session").textContent = session;
+  thread.innerHTML = "";
+  thread.appendChild(hint);
+  hint.style.display = "";
+  box.focus();
+};
+
+document.getElementById("analyze").onclick = async () => {
+  const bubble = add("them", "looking at the data…");
+  const started = Date.now();
+  try {
+    const answer = await fetch("/_nl/analyze", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}"
+    });
+    const data = await answer.json();
+    const seconds = ((Date.now() - started) / 1000).toFixed(1);
+    if (!answer.ok) {
+      bubble.classList.add("bad");
+      bubble.textContent = reasonFrom(data);
+      note(bubble, `${answer.status} · ${seconds}s`);
+      return;
+    }
+    const names = Object.keys(data.indices || {});
+    bubble.textContent = names.length
+      ? `Worked out what ${names.length} ${names.length === 1 ? "index holds" : "indices hold"}: ${names.join(", ")}.`
+      : "There was nothing to look at.";
+    for (const name of names) detail(bubble, name, data.indices[name]);
+    note(bubble, `${data.analysed || 0} written · ${seconds}s`);
+  } catch (broken) {
+    bubble.classList.add("bad");
+    bubble.textContent = "Could not reach the local server: " + broken;
+  }
+};
+</script>
+</body>
+</html>
